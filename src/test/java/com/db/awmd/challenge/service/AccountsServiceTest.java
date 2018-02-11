@@ -9,6 +9,7 @@ import com.db.awmd.challenge.repository.AccountsRepositoryInMemory;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.math.BigDecimal;
 
@@ -17,10 +18,13 @@ import static org.junit.Assert.assertEquals;
 @Slf4j
 public class AccountsServiceTest {
 
-	private AccountsService service = new AccountsService(new MockAccountRepository());
+	private AccountsService service;
+	private NotificationService mockNotificationService;
 
 	@Before
 	public void setup() {
+		mockNotificationService = Mockito.mock(NotificationService.class);
+		service = new AccountsService(new MockAccountRepository(), mockNotificationService);
 		service.createAccount(new MockAccount("from", 100.0));
 		service.createAccount(new MockAccount("to", 100.0));
 	}
@@ -34,6 +38,9 @@ public class AccountsServiceTest {
 
 		assertEquals(50.0, from.readBalance(), 0.0);
 		assertEquals(150.0, to.readBalance(), 0.0);
+
+		Transfer transfer = new Transfer(from.getAccountId(), to.getAccountId(), 50);
+		Mockito.verify(mockNotificationService, Mockito.times(1)).notifyAboutTransfer(from, transfer.toString());
 	}
 
 	@Test(expected = AccountNotFoundException.class)
@@ -90,9 +97,9 @@ public class AccountsServiceTest {
 
 	//	@Test
 	public void testParallelTransferDeadlock() throws InterruptedException {
-		// Test method to show that not sorting accounts in transfer results into dead lock. Dead lock detection code
-		// is required to pass this test. Commenting @Test for now.
-		MockAccountService service1 = new MockAccountService(new MockAccountRepository());
+		// Test method to show that not sorting accounts in the AccountsService.transfer() method results into
+		// dead lock. Dead lock detection code is required to pass this test. Commenting @Test for now.
+		MockAccountService service1 = new MockAccountService(new MockAccountRepository(), mockNotificationService);
 		Account from = new MockAccount("from", 100);
 		Account to = new MockAccount("to", 100);
 
@@ -106,14 +113,39 @@ public class AccountsServiceTest {
 		t2.join();
 	}
 
+	@Test
+	public void testSequentialTransfer() throws InterruptedException {
+		// While first to second is in progress, second to third waits. And second to third does not generate
+		// InsufficientFundsException even though a it is asked to transfer more than it's original balance. The
+		// additional amount is obtained via transfer from first.
+		Account first = new MockAccount("first", 30);
+		Account second = new MockAccount("second", 20);
+		Account third = new MockAccount("third", 10);
+
+		Thread t1 = new Thread(() -> service.transfer(first, second, 10.0), "T-1");
+		Thread t2 = new Thread(() -> service.transfer(second, third, 25.0), "T-2");
+
+		t1.start();
+		// Make sure first-second transfer occurs first
+		Thread.sleep(200);
+		t2.start();
+
+		t1.join();
+		t2.join();
+
+		assertEquals(20.0, first.readBalance(), 0.0);
+		assertEquals(5.0, second.readBalance(), 0.0);
+		assertEquals(35.0, third.readBalance(), 0.0);
+	}
+
 	private static class MockAccountRepository extends AccountsRepositoryInMemory {
 
 	}
 
 	private static class MockAccountService extends AccountsService {
 
-		public MockAccountService(AccountsRepository accountsRepository) {
-			super(accountsRepository);
+		public MockAccountService(AccountsRepository accountsRepository, NotificationService notificationService) {
+			super(accountsRepository, notificationService);
 		}
 
 		@Override

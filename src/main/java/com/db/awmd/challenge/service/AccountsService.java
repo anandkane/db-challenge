@@ -19,10 +19,15 @@ public class AccountsService {
 	@Getter
 	private final AccountsRepository accountsRepository;
 
+	@Getter
+	private final NotificationService notificationService;
+
 	@Autowired
-	public AccountsService(AccountsRepository accountsRepository) {
+	public AccountsService(AccountsRepository accountsRepository, NotificationService notificationService) {
 		this.accountsRepository = accountsRepository;
+		this.notificationService = notificationService;
 	}
+
 
 	public void createAccount(Account account) {
 		this.accountsRepository.createAccount(account);
@@ -86,6 +91,8 @@ public class AccountsService {
 			smaller.unlockBalance();
 		}
 
+		Transfer transfer = new Transfer(from.getAccountId(), to.getAccountId(), amount);
+		notificationService.notifyAboutTransfer(from, transfer.toString());
 		log.info("Amount transfer successful");
 	}
 }
