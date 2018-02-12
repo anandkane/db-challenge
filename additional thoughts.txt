@@ -1,0 +1,9 @@
+The solution provided in the assignment for amount transfer between accounts is valid on a single server application. However given the volume transfer requests it is obvious that a scalable and highly available system is in order. Account management can be visualized as a micro service following the Microservices architecture, let's call it Account-Service. However, as soon as there are multiple nodes of Account-Service, the code in assignment that locks the balances of from and to accounts will jeopardize data consistency if two transfer requests for a given 'from' account are catered to by different nodes.
+
+Given below are some initial high level solution to the problem.
+
+1. Deploy Account-Service as a micro service.
+2. Choose an appropriate data store to store the Account data (RDMBS or NoSQL).
+3. Shard Account-Service such that operations for a given set of accounts are directed to a particular node. This will prevent the race conditions in case of multiple simultaneous transfer requests from same source account.
+
+
